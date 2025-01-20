@@ -1,4 +1,6 @@
-from flask import Blueprint, request, jsonify
+from flask import Blueprint, request, jsonify, current_app
+from werkzeug.utils import secure_filename
+import os
 from .models import User, Attendance_history
 from . import db
 from datetime import datetime
@@ -33,13 +35,18 @@ def login():
 
     return jsonify({"message": "Login successful", "user": user.to_dict()}), 200
 
+# Endpoint: Check-In
 @user_bp.route('/checkin', methods=['POST'])
 def checkin():
     data = request.get_json()
     user_id = data.get('user_id')
+    photo_path = data.get('photo_path')
 
     if not user_id:
         return jsonify({"error": "User ID is required."}), 400
+    
+    if not photo_path:
+        return jsonify({"error": "Photo path is required"})
 
     # Check if user has already checked in today
     today = datetime.now().date()
@@ -48,7 +55,12 @@ def checkin():
         return jsonify({"error": "User already checked in today."}), 400
 
     # Save check-in
-    new_attendance = Attendance_history(user_id=user_id, date=today, check_in_time=datetime.now())
+    new_attendance = Attendance_history(
+        user_id=user_id,
+        date=today,
+        check_in_time=datetime.now(),
+        check_in_photo=photo_path
+    )
     db.session.add(new_attendance)
     db.session.commit()
 
@@ -59,17 +71,25 @@ def checkin():
 def checkout():
     data = request.get_json()
     user_id = data.get('user_id')
+    photo_path = data.get('photo_path')
 
     if not user_id:
         return jsonify({"error": "User ID is required."}), 400
+    
+    if not photo_path:
+        return jsonify({"error": "Photo path is required"}), 400
 
     # Cek apakah user memiliki riwayat check-in sebelumnya tanpa checkout
     pending_checkin = Attendance_history.query.filter_by(user_id=user_id, check_out_time=None).first()
     if not pending_checkin:
         return jsonify({"error": "User has no pending check-in to check out from."}), 400
+    
+    if pending_checkin.check_out_time:
+        return jsonify({"error": "User already checked out today"}), 400
 
     # Simpan waktu checkout untuk entri check-in yang belum selesai
     pending_checkin.check_out_time = datetime.now()
+    pending_checkin.check_out_photo = photo_path
     db.session.commit()
 
     return jsonify({"message": "Check-out successful."}), 200
@@ -108,3 +128,27 @@ def get_report():
     ]
 
     return jsonify(report_list), 200
+
+ALLOWED_EXTENSIONS = {'png', 'jpg', 'jpeg', 'gif'}
+def allowed_file(filename):
+    return '.' in filename and filename.rsplit('.', 1)[1].lower() in ALLOWED_EXTENSIONS
+
+# Endpoint: Upload Photo
+@user_bp.route('/upload-photo', methods=['POST'])
+def upload_photo():
+    if 'file' not in request.files:
+        return jsonify({"error": "No file part in the request"}), 400
+
+    file = request.files['file']
+
+    if file.filename == '':
+        return jsonify({"error": "No selected file"}), 400
+
+    if file and allowed_file(file.filename):
+        filename = secure_filename(file.filename)
+        file_path = os.path.join(current_app.config['UPLOAD_FOLDER'], filename)
+        file.save(file_path)
+
+        return jsonify({"message": "File uploaded successfully", "file_path": file_path}), 200
+
+    return jsonify({"error": "File not allowed"}), 400

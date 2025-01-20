@@ -22,6 +22,8 @@ class Attendance_history(db.Model):
     date = db.Column(db.Date, nullable=False)
     check_in_time = db.Column(db.DateTime, nullable=False)
     check_out_time = db.Column(db.DateTime, nullable=True)
+    check_in_photo = db.Column(db.String(255))
+    check_out_photo = db.Column(db.String(255))
 
     # Relasi balik ke User
     user = db.relationship('User', back_populates='histories')

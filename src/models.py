@@ -19,10 +19,9 @@ class User(db.Model):
 class Attendance_history(db.Model):
     id = db.Column(db.Integer, primary_key=True)
     user_id = db.Column(db.Integer, db.ForeignKey('user.id'), nullable=False)
+    date = db.Column(db.Date, nullable=False)
     check_in_time = db.Column(db.DateTime, nullable=False)
-    check_out_time = db.Column(db.DateTime, nullable=False)
-    check_in_asset = db.Column(db.String(120), nullable=False)
-    check_out_asset = db.Column(db.String(120), nullable=False)
+    check_out_time = db.Column(db.DateTime, nullable=True)
 
     # Relasi balik ke User
     user = db.relationship('User', back_populates='histories')
@@ -31,8 +30,7 @@ class Attendance_history(db.Model):
         return {
             "id": self.id,
             "user_id": self.user_id,
+            "date": self.date,
             "check_in_time": self.check_in_time.isoformat() if self.check_in_time else None,
             "check_out_time": self.check_out_time.isoformat() if self.check_out_time else None,
-            "check_in_asset": self.check_in_asset,
-            "check_out_asset": self.check_out_asset
         }

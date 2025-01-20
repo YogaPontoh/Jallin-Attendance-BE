@@ -2,31 +2,37 @@ from . import db
 
 class User(db.Model):
     id = db.Column(db.Integer, primary_key=True)
-    name = db.Column(db.String(80), nullable=False)
+    username = db.Column(db.String(80), nullable=False)
     password = db.Column(db.String(120), nullable=False)
+
+    # Relasi One-to-Many ke Attendance_history
+    histories = db.relationship('Attendance_history', back_populates='user', cascade='all, delete')
 
     def to_dict(self):
         return {
             "id": self.id,
-            "name": self.name,
-            "password": self.password
+            "username": self.username,
+            "password": self.password,
+            "histories": [history.to_dict() for history in self.histories]
         }
 
 class Attendance_history(db.Model):
     id = db.Column(db.Integer, primary_key=True)
     user_id = db.Column(db.Integer, db.ForeignKey('user.id'), nullable=False)
-    
     check_in_time = db.Column(db.DateTime, nullable=False)
     check_out_time = db.Column(db.DateTime, nullable=False)
     check_in_asset = db.Column(db.String(120), nullable=False)
     check_out_asset = db.Column(db.String(120), nullable=False)
 
+    # Relasi balik ke User
+    user = db.relationship('User', back_populates='histories')
+
     def to_dict(self):
         return {
             "id": self.id,
-            "user_id": self.name,
-            "check_in_time": self.check_in_time,
-            "check_out_time": self.check_out_time,
+            "user_id": self.user_id,
+            "check_in_time": self.check_in_time.isoformat() if self.check_in_time else None,
+            "check_out_time": self.check_out_time.isoformat() if self.check_out_time else None,
             "check_in_asset": self.check_in_asset,
             "check_out_asset": self.check_out_asset
         }

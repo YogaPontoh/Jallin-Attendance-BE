@@ -110,7 +110,9 @@ def get_report():
             User.username,
             Attendance_history.date,
             Attendance_history.check_in_time,
-            Attendance_history.check_out_time
+            Attendance_history.check_out_time,
+            Attendance_history.check_in_photo,
+            Attendance_history.check_out_photo
         )
         .join(User, Attendance_history.user_id == User.id)
         .all()
@@ -122,7 +124,9 @@ def get_report():
             "username": report.username,
             "date": report.date.strftime('%Y-%m-%d'),
             "check_in_time": report.check_in_time.strftime('%H:%M:%S') if report.check_in_time else None,
-            "check_out_time": report.check_out_time.strftime('%H:%M:%S') if report.check_out_time else None
+            "check_out_time": report.check_out_time.strftime('%H:%M:%S') if report.check_out_time else None,
+            "check_in_photo": report.check_in_photo,
+            "check_out_photo": report.check_out_photo
         }
         for report in reports
     ]

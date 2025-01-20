@@ -33,10 +33,40 @@ def login():
     return jsonify({"message": "Login successful", "user": user.to_dict()}), 200
 
 
-@user_bp.route('', methods=['GET'])
+# Endpoint: Get list of users (Admin only)
+@user_bp.route('/users', methods=['GET'])
 def get_users():
     users = User.query.all()
-    return jsonify([user.to_dict() for user in users]), 200
+    user_list = [{"id": user.id, "username": user.username, "password": user.password} for user in users]
+    return jsonify(user_list), 200
+
+# Endpoint: Get attendance report (Admin only)
+@user_bp.route('/report', methods=['GET'])
+def get_report():
+    # Query untuk mendapatkan laporan dengan username
+    reports = (
+        db.session.query(
+            User.username,
+            Attendance_history.date,
+            Attendance_history.check_in_time,
+            Attendance_history.check_out_time
+        )
+        .join(User, Attendance_history.user_id == User.id)
+        .all()
+    )
+
+    # Membentuk respons JSON
+    report_list = [
+        {
+            "username": report.username,
+            "date": report.date.strftime('%Y-%m-%d'),
+            "check_in_time": report.check_in_time.strftime('%H:%M:%S') if report.check_in_time else None,
+            "check_out_time": report.check_out_time.strftime('%H:%M:%S') if report.check_out_time else None
+        }
+        for report in reports
+    ]
+
+    return jsonify(report_list), 200
 
 @user_bp.route('/<int:user_id>', methods=['GET'])
 def get_user(user_id):

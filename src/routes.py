@@ -21,8 +21,17 @@ def create_user():
 @user_bp.route('/login', methods=['POST'])
 def login():
     data = request.get_json()
+
     if not data.get('name') or not data.get('password'):
         return jsonify({"error": "Username or password salah"}), 400
+    
+    user = User.query.filter_by(username=data.get('name')).first()
+
+    if not user or not (user.password, data.get('password')):
+        return jsonify({"error": "Invalid username or password"}), 401
+
+    return jsonify({"message": "Login successful", "user": user.to_dict()}), 200
+
 
 @user_bp.route('', methods=['GET'])
 def get_users():

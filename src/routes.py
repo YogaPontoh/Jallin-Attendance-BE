@@ -1,9 +1,12 @@
 from flask import Blueprint, request, jsonify, current_app
 from werkzeug.utils import secure_filename
-import os
 from .models import User, Attendance_history
 from . import db
 from datetime import datetime
+from io import BytesIO
+import os
+import base64
+
 
 user_bp = Blueprint('user', __name__)
 
@@ -137,7 +140,7 @@ ALLOWED_EXTENSIONS = {'png', 'jpg', 'jpeg', 'gif'}
 def allowed_file(filename):
     return '.' in filename and filename.rsplit('.', 1)[1].lower() in ALLOWED_EXTENSIONS
 
-# Endpoint: Upload Photo
+# Endpoint: Upload Photo to path
 @user_bp.route('/upload-photo', methods=['POST'])
 def upload_photo():
     if 'file' not in request.files:
@@ -156,3 +159,29 @@ def upload_photo():
         return jsonify({"message": "File uploaded successfully", "file_path": file_path}), 200
 
     return jsonify({"error": "File not allowed"}), 400
+
+#Endpoint: Photo Path to base64
+@user_bp.route('/file-to-base64', methods=['POST'])
+def file_to_base64():
+    data = request.get_json()
+    file_path = data.get('file_path')  # Path file dari request
+
+    if not file_path:
+        return jsonify({"error": "File path is required"}), 400
+
+    # Pastikan file benar-benar ada
+    full_path = os.path.join(current_app.config['UPLOAD_FOLDER'], file_path)
+    if not os.path.exists(full_path):
+        return jsonify({"error": f"File not found: {file_path}"}), 404
+
+    try:
+        # Baca file dan konversi ke Base64
+        with open(full_path, "rb") as image_file:
+            encoded_string = base64.b64encode(image_file.read()).decode('utf-8')
+
+        return jsonify({
+            "message": "File converted to Base64 successfully",
+            "file_base64": encoded_string
+        }), 200
+    except Exception as e:
+        return jsonify({"error": f"An error occurred: {str(e)}"}), 500

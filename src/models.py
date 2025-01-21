@@ -4,8 +4,8 @@ class User(db.Model):
     id = db.Column(db.Integer, primary_key=True)
     username = db.Column(db.String(80), nullable=False)
     password = db.Column(db.String(120), nullable=False)
+    role = db.Column(db.String(120), nullable=False)
 
-    # Relasi One-to-Many ke Attendance_history
     histories = db.relationship('Attendance_history', back_populates='user', cascade='all, delete')
 
     def to_dict(self):
@@ -13,6 +13,7 @@ class User(db.Model):
             "id": self.id,
             "username": self.username,
             "password": self.password,
+            "role": self.role,
             "histories": [history.to_dict() for history in self.histories]
         }
 
@@ -25,7 +26,6 @@ class Attendance_history(db.Model):
     check_in_photo = db.Column(db.String(255))
     check_out_photo = db.Column(db.String(255))
 
-    # Relasi balik ke User
     user = db.relationship('User', back_populates='histories')
 
     def to_dict(self):

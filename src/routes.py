@@ -1,12 +1,14 @@
 from flask import Blueprint, request, jsonify, current_app
 from werkzeug.utils import secure_filename
+import jwt
 from .models import User, Attendance_history
 from . import db
-from datetime import datetime
+from datetime import datetime, timedelta
 from io import BytesIO
 import os
 import base64
 
+SECRET_KEY = "your-secret-key"
 
 user_bp = Blueprint('user', __name__)
 
@@ -19,7 +21,10 @@ def create_user():
     if User.query.filter_by(username=data['username']).first():
         return jsonify({"error": "Username already exists."}), 400
 
-    new_user = User(username=data['username'], password=data['password'])
+    if data.get('role') != 'admin' and data.get('role') != 'user':
+        return jsonify({"error": "Role yang dimasukan salah"}), 400
+
+    new_user = User(username=data['username'], password=data['password'], role=data['role'])
     db.session.add(new_user)
     db.session.commit()
     return jsonify({"message": "User created successfully.", "user": new_user.to_dict()}), 201
@@ -30,15 +35,29 @@ def login():
 
     if not data.get('username') or not data.get('password'):
         return jsonify({"error": "Username or password salah"}), 400
-    
+
     user = User.query.filter_by(username=data.get('username')).first()
 
     if not user or not (user.password, data.get('password')):
         return jsonify({"error": "Invalid username or password"}), 401
 
-    return jsonify({"message": "Login successful", "user": user.to_dict()}), 200
+    token = jwt.encode(
+        {
+            "user_id": user.id,
+            "username": user.username,
+            "role": user.role,
+            "exp": datetime.utcnow() + timedelta(minutes=15)
+        },
+        SECRET_KEY,
+        algorithm="HS256"
+    )
 
-# Endpoint: Check-In
+    return jsonify({
+        "message": "Login successful",
+        "token": token,
+        "user": user.to_dict()
+    }), 200
+
 @user_bp.route('/checkin', methods=['POST'])
 def checkin():
     data = request.get_json()
@@ -51,13 +70,11 @@ def checkin():
     if not photo_path:
         return jsonify({"error": "Photo path is required"})
 
-    # Check if user has already checked in today
     today = datetime.now().date()
     attendance = Attendance_history.query.filter_by(user_id=user_id, date=today).first()
     if attendance:
         return jsonify({"error": "User already checked in today."}), 400
 
-    # Save check-in
     new_attendance = Attendance_history(
         user_id=user_id,
         date=today,
@@ -69,7 +86,6 @@ def checkin():
 
     return jsonify({"message": "Check-in successful."}), 200
 
-# Endpoint: Check-out
 @user_bp.route('/checkout', methods=['POST'])
 def checkout():
     data = request.get_json()
@@ -82,7 +98,6 @@ def checkout():
     if not photo_path:
         return jsonify({"error": "Photo path is required"}), 400
 
-    # Cek apakah user memiliki riwayat check-in sebelumnya tanpa checkout
     pending_checkin = Attendance_history.query.filter_by(user_id=user_id, check_out_time=None).first()
     if not pending_checkin:
         return jsonify({"error": "User has no pending check-in to check out from."}), 400
@@ -90,24 +105,20 @@ def checkout():
     if pending_checkin.check_out_time:
         return jsonify({"error": "User already checked out today"}), 400
 
-    # Simpan waktu checkout untuk entri check-in yang belum selesai
     pending_checkin.check_out_time = datetime.now()
     pending_checkin.check_out_photo = photo_path
     db.session.commit()
 
     return jsonify({"message": "Check-out successful."}), 200
 
-# Endpoint: Get list of users (Admin only)
 @user_bp.route('/users', methods=['GET'])
 def get_users():
     users = User.query.all()
     user_list = [{"id": user.id, "username": user.username, "password": user.password} for user in users]
     return jsonify(user_list), 200
 
-# Endpoint: Get attendance report (Admin only)
 @user_bp.route('/report', methods=['GET'])
 def get_report():
-    # Query untuk mendapatkan laporan dengan username
     reports = (
         db.session.query(
             User.username,
@@ -121,7 +132,6 @@ def get_report():
         .all()
     )
 
-    # Membentuk respons JSON
     report_list = [
         {
             "username": report.username,
@@ -140,7 +150,6 @@ ALLOWED_EXTENSIONS = {'png', 'jpg', 'jpeg', 'gif'}
 def allowed_file(filename):
     return '.' in filename and filename.rsplit('.', 1)[1].lower() in ALLOWED_EXTENSIONS
 
-# Endpoint: Upload Photo to path
 @user_bp.route('/upload-photo', methods=['POST'])
 def upload_photo():
     if 'file' not in request.files:
@@ -160,22 +169,19 @@ def upload_photo():
 
     return jsonify({"error": "File not allowed"}), 400
 
-#Endpoint: Photo Path to base64
 @user_bp.route('/file-to-base64', methods=['POST'])
 def file_to_base64():
     data = request.get_json()
-    file_path = data.get('file_path')  # Path file dari request
+    file_path = data.get('file_path')
 
     if not file_path:
         return jsonify({"error": "File path is required"}), 400
 
-    # Pastikan file benar-benar ada
     full_path = os.path.join(current_app.config['UPLOAD_FOLDER'], file_path)
     if not os.path.exists(full_path):
         return jsonify({"error": f"File not found: {file_path}"}), 404
 
     try:
-        # Baca file dan konversi ke Base64
         with open(full_path, "rb") as image_file:
             encoded_string = base64.b64encode(image_file.read()).decode('utf-8')
 

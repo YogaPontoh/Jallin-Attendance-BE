@@ -1,12 +1,14 @@
-from flask import Blueprint, request, jsonify, current_app
+from flask import Blueprint, request, jsonify, current_app, send_file
 from werkzeug.utils import secure_filename
-import jwt
 from .models import User, Attendance_history
 from . import db
 from datetime import datetime, timedelta
 from io import BytesIO
 import os
 import base64
+import pandas as pd
+import io
+import jwt
 
 SECRET_KEY = "your-secret-key"
 
@@ -70,7 +72,7 @@ def checkin():
     if not photo_path:
         return jsonify({"error": "Photo path is required"})
 
-    today = datetime.now().date()
+    today = datetime.utcnow().date()
     attendance = Attendance_history.query.filter_by(user_id=user_id, date=today).first()
     if attendance:
         return jsonify({"error": "User already checked in today."}), 400
@@ -78,13 +80,13 @@ def checkin():
     new_attendance = Attendance_history(
         user_id=user_id,
         date=today,
-        check_in_time=datetime.now(),
+        check_in_time=datetime.utcnow(),
         check_in_photo=photo_path
     )
     db.session.add(new_attendance)
     db.session.commit()
 
-    return jsonify({"message": "Check-in successful."}), 200
+    return jsonify({"message": "Check-in successful.", "status": "check-in"}), 200
 
 @user_bp.route('/checkout', methods=['POST'])
 def checkout():
@@ -105,7 +107,7 @@ def checkout():
     if pending_checkin.check_out_time:
         return jsonify({"error": "User already checked out today"}), 400
 
-    pending_checkin.check_out_time = datetime.now()
+    pending_checkin.check_out_time = datetime.utcnow()
     pending_checkin.check_out_photo = photo_path
     db.session.commit()
 
@@ -121,7 +123,7 @@ def get_users():
 def get_report():
     reports = (
         db.session.query(
-            User.username,
+            User.name,
             Attendance_history.date,
             Attendance_history.check_in_time,
             Attendance_history.check_out_time,
@@ -132,19 +134,45 @@ def get_report():
         .all()
     )
 
+    base_url = request.host_url
+
     report_list = [
         {
-            "username": report.username,
+            "name": report.name,
             "date": report.date.strftime('%Y-%m-%d'),
             "check_in_time": report.check_in_time.strftime('%H:%M:%S') if report.check_in_time else None,
             "check_out_time": report.check_out_time.strftime('%H:%M:%S') if report.check_out_time else None,
-            "check_in_photo": report.check_in_photo,
-            "check_out_photo": report.check_out_photo
+            "check_in_photo": f"{base_url}{report.check_in_photo}" if report.check_in_photo else None,
+            "check_out_photo": f"{base_url}{report.check_out_photo}" if report.check_out_photo else None,
+            "hours_worked": calculate_hours_worked(report.check_in_time, report.check_out_time),
+            "overtime": calculate_overtime(report.check_in_time, report.check_out_time)
         }
         for report in reports
     ]
 
     return jsonify(report_list), 200
+
+def calculate_hours_worked(check_in_time, check_out_time):
+    """
+    Durasi jam kerja
+    """
+    if not check_in_time or not check_out_time:
+        return "Belum Checkout"
+    
+    duration = check_out_time - check_in_time
+    hours_worked = duration.total_seconds() / 3600  # Konversi ke jam
+    return round(hours_worked, 2)
+
+def calculate_overtime(check_in_time, check_out_time):
+    """
+    Menghitung jam lembur
+    """
+    hours_worked = calculate_hours_worked(check_in_time, check_out_time)
+    if isinstance(hours_worked, str):  # Jika belum checkout
+        return "Belum Checkout"
+    
+    overtime = max(0, hours_worked - 9)  # Lembur dihitung hanya jika lebih dari 9 jam
+    return round(overtime, 2)
 
 ALLOWED_EXTENSIONS = {'png', 'jpg', 'jpeg', 'gif'}
 def allowed_file(filename):
@@ -191,3 +219,49 @@ def file_to_base64():
         }), 200
     except Exception as e:
         return jsonify({"error": f"An error occurred: {str(e)}"}), 500
+
+@user_bp.route('/report/download', methods=['GET'])
+def download_report():
+    reports = (
+        db.session.query(
+            User.name,
+            Attendance_history.date,
+            Attendance_history.check_in_time,
+            Attendance_history.check_out_time,
+            Attendance_history.check_in_photo,
+            Attendance_history.check_out_photo
+        )
+        .join(User, Attendance_history.user_id == User.id)
+        .all()
+    )
+
+    # Buat data untuk DataFrame
+    data = [
+        {
+            "name": report.name,
+            "Date": report.date.strftime('%Y-%m-%d'),
+            "Check-In Time": report.check_in_time.strftime('%H:%M:%S') if report.check_in_time else None,
+            "Check-Out Time": report.check_out_time.strftime('%H:%M:%S') if report.check_out_time else None,
+            "Hours Worked": calculate_hours_worked(report.check_in_time, report.check_out_time),
+            "Overtime": calculate_overtime(report.check_in_time, report.check_out_time)
+        }
+        for report in reports
+    ]
+
+    # Konversi data menjadi DataFrame
+    df = pd.DataFrame(data)
+
+    # Simpan DataFrame ke dalam file Excel
+    output = io.BytesIO()
+    with pd.ExcelWriter(output, engine='xlsxwriter') as writer:
+        df.to_excel(writer, index=False, sheet_name='Report')
+
+    output.seek(0)
+
+    # Kirim file Excel sebagai respons
+    return send_file(
+        output,
+        mimetype='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+        as_attachment=True,
+        download_name='attendance_report.xlsx'
+    )

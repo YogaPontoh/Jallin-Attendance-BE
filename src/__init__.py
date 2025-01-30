@@ -9,7 +9,7 @@ migrate = Migrate()
 def create_app():
     app = Flask(__name__)
     
-    CORS(app)
+    CORS(app, resources={r"/*": {"origins": "http://localhost:3000"}})
     
     app.config['SQLALCHEMY_DATABASE_URI'] = 'postgresql+psycopg2://postgres:P%40ssw0rd@localhost:5432/jalin_attendance'
     app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
@@ -21,5 +21,9 @@ def create_app():
 
     from .routes import user_bp
     app.register_blueprint(user_bp, url_prefix='/users')
+    
+    # kenapa ini hilang?
+    with app.app_context():
+        db.create_all()
 
     return app

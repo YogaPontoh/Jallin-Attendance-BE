@@ -9,6 +9,7 @@ import base64
 import pandas as pd
 import io
 import jwt
+from sqlalchemy import desc
 
 SECRET_KEY = "your-secret-key"
 
@@ -59,6 +60,29 @@ def login():
         "token": token,
         "user": user.to_dict()
     }), 200
+
+@user_bp.route('/attendance-status', methods=['GET'])
+def attendace_status():
+    user_id = request.args.get('user_id')
+    
+    if not user_id:
+        return jsonify({"error": "user_id tidak di isi"}), 400
+    
+    user = User.query.filter_by(id=user_id).first()
+    
+    if not user:
+        return jsonify({"error": "user_id tidak di temukan"}), 400
+    
+    last_checkin = Attendance_history.query.filter(
+        Attendance_history.check_out_time.is_(None)
+    ).order_by(
+        desc(Attendance_history.check_in_time)
+    ).first()
+    
+    return jsonify({
+        "last_checkin": last_checkin.check_in_time if last_checkin else None,
+        "last_checkout": last_checkin.check_out_time if last_checkin else None
+    })
 
 @user_bp.route('/checkin', methods=['POST'])
 def checkin():
@@ -142,8 +166,8 @@ def get_report():
             "date": report.date.strftime('%Y-%m-%d'),
             "check_in_time": report.check_in_time.strftime('%H:%M:%S') if report.check_in_time else None,
             "check_out_time": report.check_out_time.strftime('%H:%M:%S') if report.check_out_time else None,
-            "check_in_photo": f"{base_url}{report.check_in_photo}" if report.check_in_photo else None,
-            "check_out_photo": f"{base_url}{report.check_out_photo}" if report.check_out_photo else None,
+            "check_in_photo": report.check_in_photo if report.check_in_photo else None,
+            "check_out_photo": report.check_out_photo if report.check_out_photo else None,
             "hours_worked": calculate_hours_worked(report.check_in_time, report.check_out_time),
             "overtime": calculate_overtime(report.check_in_time, report.check_out_time)
         }
@@ -160,7 +184,7 @@ def calculate_hours_worked(check_in_time, check_out_time):
         return "Belum Checkout"
     
     duration = check_out_time - check_in_time
-    hours_worked = duration.total_seconds() / 3600  # Konversi ke jam
+    hours_worked = duration.total_seconds() / 3600
     return round(hours_worked, 2)
 
 def calculate_overtime(check_in_time, check_out_time):
@@ -168,10 +192,10 @@ def calculate_overtime(check_in_time, check_out_time):
     Menghitung jam lembur
     """
     hours_worked = calculate_hours_worked(check_in_time, check_out_time)
-    if isinstance(hours_worked, str):  # Jika belum checkout
+    if isinstance(hours_worked, str):
         return "Belum Checkout"
     
-    overtime = max(0, hours_worked - 9)  # Lembur dihitung hanya jika lebih dari 9 jam
+    overtime = max(0, hours_worked - 9)
     return round(overtime, 2)
 
 ALLOWED_EXTENSIONS = {'png', 'jpg', 'jpeg', 'gif'}
@@ -205,9 +229,9 @@ def file_to_base64():
     if not file_path:
         return jsonify({"error": "File path is required"}), 400
 
-    full_path = os.path.join(current_app.config['UPLOAD_FOLDER'], file_path)
+    full_path = os.path.join(file_path)
     if not os.path.exists(full_path):
-        return jsonify({"error": f"File not found: {file_path}"}), 404
+        return jsonify({"error": "File not found: {file_path}"}), 404
 
     try:
         with open(full_path, "rb") as image_file:
@@ -218,7 +242,7 @@ def file_to_base64():
             "file_base64": encoded_string
         }), 200
     except Exception as e:
-        return jsonify({"error": f"An error occurred: {str(e)}"}), 500
+        return jsonify({"error": "An error occurred: {str(e)}"}), 500
 
 @user_bp.route('/report/download', methods=['GET'])
 def download_report():
@@ -235,7 +259,6 @@ def download_report():
         .all()
     )
 
-    # Buat data untuk DataFrame
     data = [
         {
             "name": report.name,
@@ -248,17 +271,14 @@ def download_report():
         for report in reports
     ]
 
-    # Konversi data menjadi DataFrame
     df = pd.DataFrame(data)
 
-    # Simpan DataFrame ke dalam file Excel
     output = io.BytesIO()
     with pd.ExcelWriter(output, engine='xlsxwriter') as writer:
         df.to_excel(writer, index=False, sheet_name='Report')
 
     output.seek(0)
 
-    # Kirim file Excel sebagai respons
     return send_file(
         output,
         mimetype='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',

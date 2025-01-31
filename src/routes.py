@@ -49,7 +49,7 @@ def login():
             "user_id": user.id,
             "username": user.username,
             "role": user.role,
-            "exp": datetime.utcnow() + timedelta(minutes=15)
+            "exp": datetime.now() + timedelta(minutes=15)
         },
         SECRET_KEY,
         algorithm="HS256"
@@ -96,7 +96,7 @@ def checkin():
     if not photo_path:
         return jsonify({"error": "Photo path is required"})
 
-    today = datetime.utcnow().date()
+    today = datetime.now().date()
     attendance = Attendance_history.query.filter_by(user_id=user_id, date=today).first()
     if attendance:
         return jsonify({"error": "User already checked in today."}), 400
@@ -104,7 +104,7 @@ def checkin():
     new_attendance = Attendance_history(
         user_id=user_id,
         date=today,
-        check_in_time=datetime.utcnow(),
+        check_in_time=datetime.now(),
         check_in_photo=photo_path
     )
     db.session.add(new_attendance)
@@ -131,7 +131,7 @@ def checkout():
     if pending_checkin.check_out_time:
         return jsonify({"error": "User already checked out today"}), 400
 
-    pending_checkin.check_out_time = datetime.utcnow()
+    pending_checkin.check_out_time = datetime.now()
     pending_checkin.check_out_photo = photo_path
     db.session.commit()
 
@@ -148,6 +148,7 @@ def get_report():
     reports = (
         db.session.query(
             User.name,
+            User.department,
             Attendance_history.date,
             Attendance_history.check_in_time,
             Attendance_history.check_out_time,
@@ -163,6 +164,7 @@ def get_report():
     report_list = [
         {
             "name": report.name,
+            "department": report.department,
             "date": report.date.strftime('%Y-%m-%d'),
             "check_in_time": report.check_in_time.strftime('%H:%M:%S') if report.check_in_time else None,
             "check_out_time": report.check_out_time.strftime('%H:%M:%S') if report.check_out_time else None,
@@ -249,6 +251,7 @@ def download_report():
     reports = (
         db.session.query(
             User.name,
+            User.department,
             Attendance_history.date,
             Attendance_history.check_in_time,
             Attendance_history.check_out_time,
@@ -261,7 +264,8 @@ def download_report():
 
     data = [
         {
-            "name": report.name,
+            "Name": report.name,
+            "Department": report.department,
             "Date": report.date.strftime('%Y-%m-%d'),
             "Check-In Time": report.check_in_time.strftime('%H:%M:%S') if report.check_in_time else None,
             "Check-Out Time": report.check_out_time.strftime('%H:%M:%S') if report.check_out_time else None,

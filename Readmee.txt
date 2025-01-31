@@ -1,5 +1,10 @@
+# MAC OS
 python3 -m venv .venv
 . .venv/bin/activate
+
+# Windows
+py -m venv .venv
+.venv\Scripts\Activate
 
 *Normal Run
 flask --app main run

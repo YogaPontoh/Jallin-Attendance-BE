@@ -43,6 +43,9 @@ def login():
 
     if not user or not (user.password, data.get('password')):
         return jsonify({"error": "Invalid username or password"}), 401
+    
+    if not (user.password == data.get('password')):
+        return jsonify({"error": "Invalid password"}), 401
 
     token = jwt.encode(
         {

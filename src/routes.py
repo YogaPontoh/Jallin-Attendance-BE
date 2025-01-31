@@ -41,7 +41,7 @@ def login():
 
     user = User.query.filter_by(username=data.get('username')).first()
 
-    if not user or not (user.password, data.get('password')):
+    if not user:
         return jsonify({"error": "Invalid username or password"}), 401
     
     if not (user.password == data.get('password')):
@@ -77,7 +77,7 @@ def attendace_status():
         return jsonify({"error": "user_id tidak di temukan"}), 400
     
     last_checkin = Attendance_history.query.filter(
-        Attendance_history.check_out_time.is_(None)
+        Attendance_history.check_out_time.is_(None) & (Attendance_history.user_id == user.id)
     ).order_by(
         desc(Attendance_history.check_in_time)
     ).first()

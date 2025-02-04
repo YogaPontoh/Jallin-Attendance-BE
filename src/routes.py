@@ -180,29 +180,41 @@ def get_report():
     ]
 
     return jsonify(report_list), 200
-
+    
 def calculate_hours_worked(check_in_time, check_out_time):
     """
-    Durasi jam kerja
+    Menghitung durasi jam kerja dan mengembalikannya dalam format HH:MM.
     """
     if not check_in_time or not check_out_time:
         return "Belum Checkout"
     
     duration = check_out_time - check_in_time
-    hours_worked = duration.total_seconds() / 3600
-    return round(hours_worked, 2)
+    total_seconds = duration.total_seconds()
+    
+    hours, remainder = divmod(total_seconds, 3600)
+    minutes, _ = divmod(remainder, 60)
+    
+    return f"{int(hours):02d}:{int(minutes):02d}"
+
 
 def calculate_overtime(check_in_time, check_out_time):
     """
     Menghitung jam lembur
     """
-    hours_worked = calculate_hours_worked(check_in_time, check_out_time)
-    if isinstance(hours_worked, str):
+    if not check_in_time or not check_out_time:
         return "Belum Checkout"
     
-    overtime = max(0, hours_worked - 9)
-    return round(overtime, 2)
-
+    duration = check_out_time - check_in_time
+    total_seconds = duration.total_seconds()
+    
+    hours, remainder = divmod(total_seconds-32400, 3600)
+    minutes, _ = divmod(remainder, 60)
+    
+    if hours < 0:
+        return "0"
+    else:
+        return f"{int(hours):02d}:{int(minutes):02d}"
+    
 ALLOWED_EXTENSIONS = {'png', 'jpg', 'jpeg', 'gif'}
 def allowed_file(filename):
     return '.' in filename and filename.rsplit('.', 1)[1].lower() in ALLOWED_EXTENSIONS

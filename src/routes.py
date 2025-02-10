@@ -148,8 +148,10 @@ def get_users():
 
 @user_bp.route('/report', methods=['GET'])
 def get_report():
-    reports = (
-        db.session.query(
+    department = request.args.get('department')
+    print("Departemen yang diterima:", department)
+    
+    query = db.session.query(
             User.name,
             User.department,
             Attendance_history.date,
@@ -157,11 +159,13 @@ def get_report():
             Attendance_history.check_out_time,
             Attendance_history.check_in_photo,
             Attendance_history.check_out_photo
-        )
-        .join(User, Attendance_history.user_id == User.id)
-        .all()
-    )
-
+        ).join(User, Attendance_history.user_id == User.id)
+        
+    if department:
+            query = query.filter(User.department == department)
+    
+    reports = query.all()
+    
     base_url = request.host_url
 
     report_list = [
@@ -263,8 +267,8 @@ def file_to_base64():
 
 @user_bp.route('/report/download', methods=['GET'])
 def download_report():
-    reports = (
-        db.session.query(
+    department = request.args.get('department')
+    query = db.session.query(
             User.name,
             User.department,
             Attendance_history.date,
@@ -272,10 +276,12 @@ def download_report():
             Attendance_history.check_out_time,
             Attendance_history.check_in_photo,
             Attendance_history.check_out_photo
-        )
-        .join(User, Attendance_history.user_id == User.id)
-        .all()
-    )
+        ).join(User, Attendance_history.user_id == User.id)
+        
+    if department:
+        query = query.filter(User.department == department)
+
+    reports = query.all()
 
     data = [
         {
@@ -302,5 +308,5 @@ def download_report():
         output,
         mimetype='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
         as_attachment=True,
-        download_name='attendance_report.xlsx'
+        download_name=f'attendance_report_{department or "all"}.xlsx'
     )
